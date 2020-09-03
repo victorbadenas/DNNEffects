@@ -2,6 +2,7 @@ import json
 import torch
 from pathlib import Path
 
+
 class ModelIO:
     def __init__(self, parameters, model):
         self.model = model
