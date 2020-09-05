@@ -26,15 +26,12 @@ def parse_arguments_from_command_line():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--name", type=str, required=True)
     parser.add_argument("-d", "--debug", action="store_true", default=False)
-    parser.add_argument("--log_file", type=str, default="../log/train.log")
+    parser.add_argument("-lst", "--lst", type=Path, required=True)
+    parser.add_argument("--log_file", type=Path, default="../log/train.log")
     parser.add_argument("--epochs", type=int, default=300)
-    parser.add_argument("--checkpoint", type=str, default=None)
+    parser.add_argument("--frame_length", type=int, default=128)
+    parser.add_argument("--checkpoint", type=Path, default=None)
     return parser.parse_args()
-
-
-def convert_paths_to_pathlib(parameters):
-    parameters.log_file = Path(parameters.log_file)
-    parameters.checkpoint = Path(parameters.checkpoint) if parameters.checkpoint is not None else None
 
 
 def show_parameters(parameters):
@@ -45,5 +42,4 @@ def show_parameters(parameters):
 
 if __name__ == "__main__":
     parameters = parse_arguments_from_command_line()
-    convert_paths_to_pathlib(parameters)
     main(parameters)
