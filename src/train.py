@@ -27,9 +27,10 @@ def parse_arguments_from_command_line():
     parser.add_argument("-n", "--name", type=str, required=True)
     parser.add_argument("-d", "--debug", action="store_true", default=False)
     parser.add_argument("-lst", "--lst", type=Path, required=True)
-    parser.add_argument("--log_file", type=Path, default="../log/train.log")
+    parser.add_argument("--log_file", type=Path, default="./log/train.log")
     parser.add_argument("--epochs", type=int, default=300)
     parser.add_argument("--frame_length", type=int, default=128)
+    parser.add_argument("--log_interval", type=int, default=200)
     parser.add_argument("--checkpoint", type=Path, default=None)
     return parser.parse_args()
 
