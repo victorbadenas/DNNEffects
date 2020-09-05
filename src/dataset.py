@@ -22,9 +22,9 @@ class LstDataset(Dataset):
 
     def load_audio_data(self):
         self.source_audio_files, load_time = self.load_audio_files(label='source', timer=timer)
-        logging.info(f"source audio files have been loaded in {load_time:.2}s")
+        logging.info(f"source audio files have been loaded in {load_time:.2f}s")
         self.target_audio_files, load_time = self.load_audio_files(label='target', timer=timer)
-        logging.info(f"target audio files have been loaded in {load_time:.2}s")
+        logging.info(f"target audio files have been loaded in {load_time:.2f}s")
 
     def compute_frame_list(self):
         self.compute_frame_list_from_audio_files(self.source_audio_files)
