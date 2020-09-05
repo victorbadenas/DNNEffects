@@ -2,6 +2,7 @@ import torch
 import logging
 from model import Model
 from model_io import ModelIO
+from dataset import LstDataset
 
 
 class Trainer():
@@ -9,6 +10,7 @@ class Trainer():
         self.parameters = parameters
         self.init_model()
         self.init_torch_modules()
+        self.init_dataset()
 
     def init_model(self):
         self.model = Model(self.parameters)
@@ -22,6 +24,10 @@ class Trainer():
 
     def init_torch_modules(self):
         self.optimizer = None
+
+    def init_dataset(self):
+        self.trainDataset = LstDataset(self.parameters)
+        self.testDataset = LstDataset(self.parameters)
 
     def __call__(self, *args, **kwargs):
         self.train_model(*args, **kwargs)
