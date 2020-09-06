@@ -78,10 +78,14 @@ class Trainer():
     def test_epoch(self):
         logging.info("Test stage")
         self.model.eval()
+        if self.device is "cuda":
+            self.model.cuda()
         with torch.no_grad():
             test_mse_error = 0.0
             for batch_idx, (source_tensor, target_tensor) in enumerate(self.test_dataset):
                 self.log_progress(batch_idx, len(self.test_dataset), self.parameters.log_interval, test_mse_error)
+                if self.device is "cuda":
+                    source_tensor, target_tensor = self.move_tensors_to_cuda(source_tensor, target_tensor)
                 outputs = self.model(source_tensor)
                 loss = self.criterion(outputs, target_tensor)
                 test_mse_error += loss.item()/abs(target_tensor).max()**2/2
