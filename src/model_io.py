@@ -38,12 +38,26 @@ class ModelIO:
             self.__save(epoch, metric)
 
     def __save(self, epoch, metric):
-        config = {"epoch": epoch, "best_metric": metric, "parameters": self.parameters.__dict__}
+        config = self.build_config(epoch, metric)
         checkpoint_path = self.build_checkpoint_path(epoch)
         config_path = self.build_config_path(epoch)
         self.__create_folders(checkpoint_path)
         self.__save_checkpoint(checkpoint_path)
         self.__save_model_config(config_path, config)
+        self.__update_best_metric(metric)
+
+    def __update_best_metric(self, metric):
+        self.best_metric = metric
+
+    def build_config(self, epoch, metric):
+        parameters = {}
+        for key, value in self.parameters.__dict__.items():
+                parameters[key] = str(value) if isinstance(value, Path) else value
+        if isinstance(metric, torch.Tensor):
+            config = {"epoch": epoch, "best_metric": metric.item(), "parameters": parameters}
+        else:
+            config = {"epoch": epoch, "best_metric": metric, "parameters": parameters}
+        return config
 
     def __save_checkpoint(self, checkpoint_path):
         logging.info(f"model saved to {checkpoint_path}")
