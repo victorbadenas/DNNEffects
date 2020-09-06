@@ -7,10 +7,10 @@ import soundfile as sf
 from utils import timer
 
 class LstDataset(Dataset):
-    def __init__(self, parameters):
+    def __init__(self, parameters, lst_path):
         super(LstDataset, self).__init__()
         self.parameters = parameters
-        self.lst_data = self.load_lst(parameters.lst)
+        self.lst_data = self.load_lst(lst_path)
         self.load_audio_data()
         self.compute_frame_list()
 
@@ -18,7 +18,7 @@ class LstDataset(Dataset):
     def load_lst(lst_path):
         if not lst_path.exists():
             raise OSError("lst file not found")
-        return pd.read_csv(lst_path, sep='\t')
+        return pd.read_csv(lst_path, sep='\t', index_col=0)
 
     def load_audio_data(self):
         self.source_audio_files, load_time = self.load_audio_files(label='source', timer=timer)
