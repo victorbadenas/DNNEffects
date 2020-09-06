@@ -30,8 +30,8 @@ class Trainer():
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def init_dataset(self):
-        self.train_dataset = DataLoader(LstDataset(self.parameters), batch_size=256, shuffle=True, drop_last=True)
-        self.test_dataset = DataLoader(LstDataset(self.parameters), batch_size=256, shuffle=True, drop_last=True) 
+        self.train_dataset = DataLoader(LstDataset(self.parameters, self.parameters.train_lst), batch_size=256, shuffle=True, drop_last=True)
+        self.test_dataset = DataLoader(LstDataset(self.parameters, self.parameters.test_lst), batch_size=256, shuffle=True, drop_last=True) 
 
     def __call__(self, *args, **kwargs):
         self.train_model(*args, **kwargs)
