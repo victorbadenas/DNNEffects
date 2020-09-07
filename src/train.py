@@ -1,4 +1,3 @@
-import os
 import sys
 import logging
 import argparse
@@ -15,28 +14,34 @@ def set_logger(parameters):
     consoleHandler.setFormatter(logging.Formatter(logging_format))
     logging.getLogger().addHandler(consoleHandler)
 
+
 def main(parameters):
     set_logger(parameters)
     show_parameters(parameters)
     trainer = Trainer(parameters)
     trainer()
 
+
 def parse_arguments_from_command_line():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--name", type=str, required=True)
     parser.add_argument("-d", "--debug", action="store_true", default=False)
-    parser.add_argument("--log_file", type=str, default="../log/train.log")
+    parser.add_argument("-trainlst", "--train_lst", type=Path, required=True)
+    parser.add_argument("-testlst", "--test_lst", type=Path, required=True)
+    parser.add_argument("--log_file", type=Path, default="./log/train.log")
+    parser.add_argument("--epochs", type=int, default=300)
+    parser.add_argument("--frame_length", type=int, default=128)
+    parser.add_argument("--log_interval", type=int, default=200)
+    parser.add_argument("--checkpoint", type=Path, default=None)
     return parser.parse_args()
 
-def convert_paths_to_pathlib(parameters):
-    parameters.log_file = Path(parameters.log_file)
 
 def show_parameters(parameters):
     logging.info("Training with parameters:")
     for label, value in parameters.__dict__.items():
         logging.info(f"{label}: {value}")
 
+
 if __name__ == "__main__":
     parameters = parse_arguments_from_command_line()
-    convert_paths_to_pathlib(parameters)
     main(parameters)
