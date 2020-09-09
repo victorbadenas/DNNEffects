@@ -3,7 +3,9 @@ from torch.utils.data import Dataset
 import torch
 import pandas as pd
 import soundfile as sf
+import numpy as np
 from utils import timer
+import math
 
 
 class LstDataset(Dataset):
@@ -59,7 +61,7 @@ class AudioFile:
         self.load_audio_data()
 
     def load_audio_data(self):
-        self.audio_data, self.sample_rate = sf.read(self.audiofile_path, dtype='float32')
+        self.audio_data, self.sample_rate = sf.read(self.audiofile_path)
         self.audio_length = len(self.audio_data)
 
     def __len__(self):
@@ -79,3 +81,23 @@ class AudioFile:
         start_index = frame_idx * self.frame_length
         end_index = start_index + self.frame_length
         return self.audio_data[start_index:end_index]
+
+    def zero_pad(self):
+        remaining = self.audio_length % self.frame_length
+        if remaining == 0:
+            return
+        zero_pad = np.zeros(self.frame_length - remaining)
+        self.audio_data = np.concatenate((self.audio_data, zero_pad))
+        self.audio_length = len(self.audio_data)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.frame_counter >= len(self):
+            self.frame_counter = 0
+            raise StopIteration
+        else:
+            frame = self.get_frame(self.frame_counter)
+            self.frame_counter += 1
+            return frame
