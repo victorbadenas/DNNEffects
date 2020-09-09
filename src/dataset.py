@@ -1,8 +1,10 @@
 import logging
 from torch.utils.data import Dataset
+import torch
 import pandas as pd
 import soundfile as sf
 from utils import timer
+
 
 class LstDataset(Dataset):
     def __init__(self, parameters, lst_path):
@@ -46,7 +48,7 @@ class LstDataset(Dataset):
         audio_idx, frame_idx = self.frames[idx]['audio_idx'], self.frames[idx]['frame_idx']
         source_frame = self.source_audio_files[audio_idx].get_frame(frame_idx)
         target_frame = self.target_audio_files[audio_idx].get_frame(frame_idx)
-        return source_frame, target_frame
+        return torch.Tensor(source_frame).unsqueeze(1), torch.Tensor(target_frame).unsqueeze(1)
 
 
 class AudioFile:
