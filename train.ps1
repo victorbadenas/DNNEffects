@@ -5,7 +5,9 @@ if ($null -eq ${experiment}) {
 $effect="Distortion"
 $trainLst="./dataset/${effect}/train.lst"
 $testLst="./dataset/${effect}/test.lst"
+$batchSize=256
+$frameLength=1024
 New-Item -Name experiments/ -ItemType directory
 New-Item -Name experiments/${experiment} -ItemType directory
 $logFile="../experiments/${experiment}/train.log"
-python src/train.py -n ${experiment} --log_file ${logFile} -trainlst ${trainLst} -testlst ${testLst}
+python src/train.py -n ${experiment} --log_file ${logFile} -trainlst ${trainLst} -testlst ${testLst} --batch_size=$batchSize --frame_length=$frameLength
