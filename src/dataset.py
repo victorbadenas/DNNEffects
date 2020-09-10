@@ -33,10 +33,11 @@ class LstDataset(Dataset):
 
     def compute_frame_list_from_audio_files(self, audio_files_array):
         self.frames = []
+        silence_threshold = 1e-10
         for audioIdx, audiofile in enumerate(audio_files_array):
-            number_of_frames = len(audiofile)
-            for frameIdx in range(number_of_frames):
-                self.frames.append({"audio_idx":audioIdx, "frame_idx": frameIdx})
+            for frameIdx, frame in enumerate(audiofile):
+                if np.sum(abs(frame)**2) > silence_threshold:
+                    self.frames.append({"audio_idx": audioIdx, "frame_idx": frameIdx})
         logging.info(f"{len(self.frames)} have been computed")
 
     @timer(print_=False)
