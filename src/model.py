@@ -32,14 +32,14 @@ class Model(nn.Module):
         self.dense2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
         self.dense3 = nn.Linear(in_features=hidden_size, out_features=hidden_size_half)
         self.dense4 = nn.Linear(in_features=hidden_size_half, out_features=1)
-        self.softplus = nn.Softplus()
+        self.activation = nn.Tanh()
 
     def forward(self, input_tensor):
-        output_tensor = self.softplus(self.conv1(input_tensor))
-        output_tensor = self.softplus(self.dense1(output_tensor))
-        output_tensor = self.softplus(self.dense2(output_tensor))
-        output_tensor = self.softplus(self.dense3(output_tensor))
-        output_tensor = self.softplus(self.dense4(output_tensor))
+        output_tensor = self.activation(self.conv1(input_tensor))
+        output_tensor = self.activation(self.dense1(output_tensor))
+        output_tensor = self.activation(self.dense2(output_tensor))
+        output_tensor = self.activation(self.dense3(output_tensor))
+        output_tensor = self.activation(self.dense4(output_tensor))
         output_tensor = output_tensor + input_tensor
         return output_tensor
 
