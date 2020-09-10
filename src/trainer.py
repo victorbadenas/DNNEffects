@@ -71,7 +71,7 @@ class Trainer():
             outputs = self.model(source_tensor)
             loss = self.criterion(outputs, target_tensor)
             loss.backward()
-            train_mse_error += loss.item()/abs(target_tensor).max()**2/2
+            train_mse_error += loss.item()
             self.optimizer.step()
         return train_mse_error / len(self.train_dataset)
 
@@ -88,5 +88,5 @@ class Trainer():
                     source_tensor, target_tensor = self.move_tensors_to_cuda(source_tensor, target_tensor)
                 outputs = self.model(source_tensor)
                 loss = self.criterion(outputs, target_tensor)
-                test_mse_error += loss.item()/abs(target_tensor).max()**2/2
+                test_mse_error += loss.item()
         return test_mse_error / len(self.train_dataset)
