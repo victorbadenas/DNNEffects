@@ -52,7 +52,7 @@ class ModelIO:
     def build_config(self, epoch, metric):
         parameters = {}
         for key, value in self.parameters.__dict__.items():
-                parameters[key] = str(value) if isinstance(value, Path) else value
+            parameters[key] = str(value) if isinstance(value, Path) else value
         if isinstance(metric, torch.Tensor):
             config = {"epoch": epoch, "best_metric": metric.item(), "parameters": parameters}
         else:
@@ -71,4 +71,3 @@ class ModelIO:
     @staticmethod
     def __create_folders(path:Path):
         path.parent.mkdir(parents=True, exist_ok=True)
-
