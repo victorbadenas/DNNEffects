@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model import Model
 from model_io import ModelIO
-from dataset import LstDataset
+from dataset import LstDataset, DatasetFromDisk
 
 
 class Trainer():

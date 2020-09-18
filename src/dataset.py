@@ -20,7 +20,7 @@ class LstDataset(Dataset):
     def load_lst(lst_path):
         if not lst_path.exists():
             raise OSError("lst file not found")
-        return pd.read_csv(lst_path, sep='\t', index_col=0)
+        return pd.read_csv(lst_path, sep='\t')
 
     def load_audio_data(self):
         self.source_audio_files, load_time = self.load_audio_files(label='source', timer=timer)
@@ -51,6 +51,36 @@ class LstDataset(Dataset):
         audio_idx, frame_idx = self.frames[idx]['audio_idx'], self.frames[idx]['frame_idx']
         source_frame = self.source_audio_files[audio_idx].get_frame(frame_idx)
         target_frame = self.target_audio_files[audio_idx].get_frame(frame_idx)
+        return torch.Tensor(source_frame).unsqueeze(1), torch.Tensor(target_frame).unsqueeze(1)
+
+
+class DatasetFromDisk(LstDataset):
+    def __init__(self, parameters, lst_path):
+        super(LstDataset, self).__init__()
+        self.parameters = parameters
+        self.lst_data = self.load_lst(lst_path)
+        self.load_audio_data()
+        self.compute_frame_list()
+        self.delete_audio_data()
+
+    def delete_audio_data(self):
+        del self.source_audio_files, self.target_audio_files
+
+    def compute_frame_list_from_audio_files(self, audio_files_array):
+        self.frames = []
+        silence_threshold = 1e-10
+        for audioIdx, audiofile in enumerate(audio_files_array):
+            for frameIdx, frame in enumerate(audiofile):
+                if np.sum(abs(frame)**2) > silence_threshold:
+                    self.frames.append({"audio_idx": audioIdx, "frame_idx": frameIdx})
+        logging.info(f"{len(self.frames)} have been computed")
+
+    def __getitem__(self, idx):
+        audio_idx, frame_idx = self.frames[idx]['audio_idx'], self.frames[idx]['frame_idx']
+        source_file = self.lst_data['source'][audio_idx]
+        source_frame = AudioFile(source_file, self.parameters.frame_length).get_frame(frame_idx)
+        target_file = self.lst_data['target'][audio_idx]
+        target_frame = AudioFile(target_file, self.parameters.frame_length).get_frame(frame_idx)
         return torch.Tensor(source_frame).unsqueeze(1), torch.Tensor(target_frame).unsqueeze(1)
 
 
