@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from model import Model
 from model_io import ModelIO
 from dataset import LstDataset, DatasetFromDisk
+from utils import Timer
 
 
 class Trainer():
@@ -13,6 +14,7 @@ class Trainer():
         self.init_model()
         self.init_torch_modules()
         self.init_dataset()
+        self.timer = Timer()
 
     def init_model(self):
         self.model = Model(self.parameters)
@@ -45,9 +47,9 @@ class Trainer():
             self.modelIO.save_model(epochIdx, test_accuracy)
 
     @staticmethod
-    def log_progress(currentidx, length, log_interval, metric):
+    def log_progress(currentidx, length, log_interval, metric, remaining_time):
         if (currentidx + 1) % log_interval == 0 or (currentidx + 1 == length):
-            logging.info(f"Progress: {currentidx+1}/{length} batches: MSEError={metric/currentidx:.6f}")
+            logging.info(f"Progress: {currentidx+1}/{length} batches: MSEError={metric/currentidx:.6f} remaining_time: {remaining_time:.2f}s")
 
     @staticmethod
     def move_tensors_to_cuda(*args):
@@ -63,8 +65,10 @@ class Trainer():
             self.model.cuda()
         logging.info("Train stage")
         train_mse_error = 0.0
+        execution_time = 0.0
         for batch_idx, (source_tensor, target_tensor) in enumerate(self.train_dataset):
-            self.log_progress(batch_idx, len(self.train_dataset), self.parameters.log_interval, train_mse_error)
+            self.timer.start()
+            self.log_progress(batch_idx, len(self.train_dataset), self.parameters.log_interval, train_mse_error, execution_time*(len(self.train_dataset)-batch_idx-1))
             if self.device == "cuda":
                 source_tensor, target_tensor = self.move_tensors_to_cuda(source_tensor, target_tensor)
             self.optimizer.zero_grad()
@@ -73,6 +77,7 @@ class Trainer():
             loss.backward()
             train_mse_error += loss.item()
             self.optimizer.step()
+            execution_time = self.timer.stop()
         return train_mse_error / len(self.train_dataset)
 
     def test_epoch(self):
@@ -82,11 +87,14 @@ class Trainer():
             self.model.cuda()
         with torch.no_grad():
             test_mse_error = 0.0
+            execution_time = 0.0
             for batch_idx, (source_tensor, target_tensor) in enumerate(self.test_dataset):
-                self.log_progress(batch_idx, len(self.test_dataset), self.parameters.log_interval, test_mse_error)
+                self.timer.start()
+                self.log_progress(batch_idx, len(self.test_dataset), self.parameters.log_interval, test_mse_error, execution_time*(len(self.train_dataset)-batch_idx-1))
                 if self.device == "cuda":
                     source_tensor, target_tensor = self.move_tensors_to_cuda(source_tensor, target_tensor)
                 outputs = self.model(source_tensor)
                 loss = self.criterion(outputs, target_tensor)
                 test_mse_error += loss.item()
+                execution_time = self.timer.stop()
         return test_mse_error / len(self.test_dataset)
