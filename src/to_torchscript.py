@@ -22,6 +22,7 @@ class ToLibtorch:
         model = Model(model_parameters)
         model_io = ModelIO(None, model)
         model_io.load_model_checkpoint(model_path)
+        model.to('cpu')
         traced_script_module = torch.jit.script(model)
         traced_script_module.save(str(saved_name_path))
         print(f"model {str(model_path)} saved to {str(saved_name_path)}")
