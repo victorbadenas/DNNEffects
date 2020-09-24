@@ -33,10 +33,10 @@ class LstDataset(Dataset):
 
     def compute_frame_list_from_audio_files(self, audio_files_array):
         self.frames = []
-        silence_threshold = 1e-10
+        silence_threshold = 1e-8
         for audioIdx, audiofile in enumerate(audio_files_array):
             for frameIdx, frame in enumerate(audiofile):
-                if np.sum(abs(frame)**2) > silence_threshold:
+                if np.sum(abs(frame)**2)/len(frame) > silence_threshold:
                     self.frames.append({"audio_idx": audioIdx, "frame_idx": frameIdx})
         logging.info(f"{len(self.frames)} have been computed")
 
@@ -65,15 +65,6 @@ class DatasetFromDisk(LstDataset):
 
     def delete_audio_data(self):
         del self.source_audio_files, self.target_audio_files
-
-    def compute_frame_list_from_audio_files(self, audio_files_array):
-        self.frames = []
-        silence_threshold = 1e-10
-        for audioIdx, audiofile in enumerate(audio_files_array):
-            for frameIdx, frame in enumerate(audiofile):
-                if np.sum(abs(frame)**2) > silence_threshold:
-                    self.frames.append({"audio_idx": audioIdx, "frame_idx": frameIdx})
-        logging.info(f"{len(self.frames)} have been computed")
 
     def __getitem__(self, idx):
         audio_idx, frame_idx = self.frames[idx]['audio_idx'], self.frames[idx]['frame_idx']
