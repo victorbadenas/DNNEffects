@@ -33,7 +33,7 @@ class ModelIO:
     def save_model(self, epoch, metric):
         if self.best_metric is None:
             logging.info(f"Saving model in epoch {epoch}")
-            logging.info(f"Metric {self.best_metric:.6f} -> {metric:.6f}")
+            logging.info(f"Metric None -> {metric:.6f}")
             self.__save(epoch, metric)
         elif metric < self.best_metric:
             logging.info(f"Saving model in epoch {epoch}")
