@@ -5,43 +5,43 @@ from custom import Abs, PoolInDim
 from utils import unpoolParameters
 
 
-# class Model(nn.Module):
-#     def __init__(self, training_parameters):
-#         super(Model, self).__init__()
-#         self.training_parameters = training_parameters
-#         self.adaptive_frontend = AdaptiveFrontend(training_parameters)
-#         self.ZDNN = ZDNN(training_parameters)
-#         self.backend = Backend(training_parameters)
-
-#     def forward(self, input_tensor):
-#         Z_tensor, pool_indices, residual_matrix = self.adaptive_frontend(input_tensor)
-#         Z_hat_tensor = self.ZDNN(Z_tensor)
-#         out_tensor = self.backend(Z_hat_tensor, pool_indices, residual_matrix)
-#         return out_tensor
-
-
 class Model(nn.Module):
     def __init__(self, training_parameters):
         super(Model, self).__init__()
         self.training_parameters = training_parameters
-        frame_length = self.training_parameters.frame_length
-        hidden_size = self.training_parameters.hidden_length
-        hidden_size_half = int(hidden_size / 2)
-        self.conv1 = nn.Conv1d(frame_length, frame_length, kernel_size=hidden_size_half, padding=hidden_size_half-1)
-        self.dense1 = nn.Linear(in_features=hidden_size_half, out_features=hidden_size)
-        self.dense2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
-        self.dense3 = nn.Linear(in_features=hidden_size, out_features=hidden_size_half)
-        self.deconv1 = nn.ConvTranspose1d(frame_length, frame_length, kernel_size=2, padding=int(hidden_size_half/2))
-        self.activation = nn.Tanh()
+        self.adaptive_frontend = AdaptiveFrontend(training_parameters)
+        self.ZDNN = ZDNN(training_parameters)
+        self.backend = Backend(training_parameters)
 
     def forward(self, input_tensor):
-        output_tensor = self.activation(self.conv1(input_tensor))
-        output_tensor = self.activation(self.dense1(output_tensor))
-        output_tensor = self.activation(self.dense2(output_tensor))
-        output_tensor = self.activation(self.dense3(output_tensor))
-        output_tensor = self.deconv1(output_tensor)
-        output_tensor = output_tensor + input_tensor
-        return output_tensor
+        Z_tensor, pool_indices, residual_matrix = self.adaptive_frontend(input_tensor)
+        Z_hat_tensor = self.ZDNN(Z_tensor)
+        out_tensor = self.backend(Z_hat_tensor, pool_indices, residual_matrix)
+        return out_tensor
+
+
+# class Model(nn.Module):
+#     def __init__(self, training_parameters):
+#         super(Model, self).__init__()
+#         self.training_parameters = training_parameters
+#         frame_length = self.training_parameters.frame_length
+#         hidden_size = self.training_parameters.hidden_length
+#         hidden_size_half = int(hidden_size / 2)
+#         self.conv1 = nn.Conv1d(frame_length, frame_length, kernel_size=hidden_size_half, padding=hidden_size_half-1)
+#         self.dense1 = nn.Linear(in_features=hidden_size_half, out_features=hidden_size)
+#         self.dense2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
+#         self.dense3 = nn.Linear(in_features=hidden_size, out_features=hidden_size_half)
+#         self.deconv1 = nn.ConvTranspose1d(frame_length, frame_length, kernel_size=2, padding=int(hidden_size_half/2))
+#         self.activation = nn.Tanh()
+
+#     def forward(self, input_tensor):
+#         output_tensor = self.activation(self.conv1(input_tensor))
+#         output_tensor = self.activation(self.dense1(output_tensor))
+#         output_tensor = self.activation(self.dense2(output_tensor))
+#         output_tensor = self.activation(self.dense3(output_tensor))
+#         output_tensor = self.deconv1(output_tensor)
+#         output_tensor = output_tensor + input_tensor
+#         return output_tensor
 
 
 class Backend(nn.Module):
@@ -56,7 +56,8 @@ class Backend(nn.Module):
         self.dense4 = nn.Linear(in_features=64, out_features=128)
         self.softplus = nn.Softplus()
         self.ReLU = nn.ReLU()
-        self.inverseConv = nn.Linear(in_features=128, out_features=1)
+        self.inverseConv = nn.ConvTranspose1d(self.training_parameters.frame_length, self.training_parameters.frame_length,
+                                              kernel_size=2, padding=64)
 
     def forward(self, input_tensor, pool_indices, residual_matrix):
         out_tensor = input_tensor.permute((0, 2, 1))
@@ -91,7 +92,7 @@ class AdaptiveFrontend(nn.Module):
     def __init__(self, training_parameters):
         super(AdaptiveFrontend, self).__init__()
         self.training_parameters = training_parameters
-        self.conv1 = nn.Conv1d(self.training_parameters.frame_length, self.training_parameters.frame_length, kernel_size=128, dilation=1, stride=1, padding=127)
+        self.conv1 = nn.Conv1d(self.training_parameters.frame_length, self.training_parameters.frame_length, kernel_size=128, dilation=1, stride=1, padding=127, groups=self.training_parameters.frame_length)
         self.abs = Abs()
         self.conv2 = nn.Conv1d(self.training_parameters.frame_length, self.training_parameters.frame_length, kernel_size=1)
         self.softplus = nn.Softplus()
@@ -109,8 +110,11 @@ if __name__ == "__main__":
     import argparse
     from torchsummary import summary
     params = argparse.Namespace()
-    params.frame_length = 1024
-    for i in range(5, 9):
-        params.hidden_length = int(2**i)
+    # params.frame_length = 128
+    for i in range(7, 8):
+        # params.hidden_length = int(2**i)
+        params.frame_length = int(2**i)
         model = Model(params)
-        summary(model, (params.frame_length, 1), device='cpu')
+        model.cuda()
+        print(params.frame_length)
+        summary(model, (params.frame_length, 1), device='cuda')
