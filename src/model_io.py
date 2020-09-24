@@ -25,7 +25,8 @@ class ModelIO:
 
     @staticmethod
     def _load_model_config(checkpoint_path):
-        checkpoint_config_path = checkpoint_path.replace(".pt", ".json")
+        checkpoint_config_path = checkpoint_path.parent / (checkpoint_path.stem + ".json")
+        # checkpoint_config_path = checkpoint_path.replace(".pt", ".json")
         with open(checkpoint_config_path, 'r') as f:
             return json.load(f)
 
