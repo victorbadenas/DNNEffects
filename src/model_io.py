@@ -25,7 +25,8 @@ class ModelIO:
 
     @staticmethod
     def _load_model_config(checkpoint_path):
-        checkpoint_config_path = checkpoint_path.replace(".pt", ".json")
+        checkpoint_config_path = checkpoint_path.parent / (checkpoint_path.stem + ".json")
+        # checkpoint_config_path = checkpoint_path.replace(".pt", ".json")
         with open(checkpoint_config_path, 'r') as f:
             return json.load(f)
 
@@ -52,7 +53,7 @@ class ModelIO:
     def build_config(self, epoch, metric):
         parameters = {}
         for key, value in self.parameters.__dict__.items():
-                parameters[key] = str(value) if isinstance(value, Path) else value
+            parameters[key] = str(value) if isinstance(value, Path) else value
         if isinstance(metric, torch.Tensor):
             config = {"epoch": epoch, "best_metric": metric.item(), "parameters": parameters}
         else:
@@ -71,4 +72,3 @@ class ModelIO:
     @staticmethod
     def __create_folders(path:Path):
         path.parent.mkdir(parents=True, exist_ok=True)
-

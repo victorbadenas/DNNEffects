@@ -31,7 +31,7 @@ class Model(nn.Module):
         self.dense1 = nn.Linear(in_features=hidden_size_half, out_features=hidden_size)
         self.dense2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
         self.dense3 = nn.Linear(in_features=hidden_size, out_features=hidden_size_half)
-        self.dense4 = nn.Linear(in_features=hidden_size_half, out_features=1)
+        self.deconv1 = nn.ConvTranspose1d(frame_length, frame_length, kernel_size=2, padding=int(hidden_size_half/2))
         self.activation = nn.Tanh()
 
     def forward(self, input_tensor):
@@ -39,7 +39,7 @@ class Model(nn.Module):
         output_tensor = self.activation(self.dense1(output_tensor))
         output_tensor = self.activation(self.dense2(output_tensor))
         output_tensor = self.activation(self.dense3(output_tensor))
-        output_tensor = self.activation(self.dense4(output_tensor))
+        output_tensor = self.deconv1(output_tensor)
         output_tensor = output_tensor + input_tensor
         return output_tensor
 

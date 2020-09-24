@@ -4,7 +4,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from model import Model
 from model_io import ModelIO
-from dataset import LstDataset
+from dataset import LstDataset, DatasetFromDisk
 
 
 class Trainer():
@@ -40,7 +40,7 @@ class Trainer():
         logging.info(f"Stating training from epoch {self.start_epoch}")
         for epochIdx in range(self.start_epoch, self.parameters.epochs):
             logging.info(f"Epoch: {epochIdx}")
-            train_accuracy = self.train_epoch()
+            self.train_epoch()
             test_accuracy = self.test_epoch()
             self.modelIO.save_model(epochIdx, test_accuracy)
 
@@ -89,4 +89,4 @@ class Trainer():
                 outputs = self.model(source_tensor)
                 loss = self.criterion(outputs, target_tensor)
                 test_mse_error += loss.item()
-        return test_mse_error / len(self.train_dataset)
+        return test_mse_error / len(self.test_dataset)

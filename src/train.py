@@ -1,8 +1,11 @@
 import sys
+import torch
 import logging
 import argparse
 from pathlib import Path
 from trainer import Trainer
+
+torch.random.manual_seed(0)
 
 
 def set_logger(parameters):
