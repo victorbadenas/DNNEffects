@@ -127,7 +127,4 @@ if __name__ == "__main__":
         params.frame_length = int(2**i)
         model = Model(params)
         device = 'cpu'
-        if torch.cuda.is_available():
-            model.cuda()
-            device = 'cuda'
         summary(model, torch.randn(2, params.frame_length, 1))
