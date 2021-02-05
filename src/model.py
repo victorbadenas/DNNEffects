@@ -1,130 +1,142 @@
-import torch
-import torch.nn as nn
-from custom import Abs, PoolInDim
-from utils import unpoolParameters
+import tensorflow as tf
+import tensorflow.keras as keras
+import tensorflow.nn as nn
+from tensorflow.keras.layers import Layer, Dense, Input, Conv1D, LocallyConnected1D, MaxPooling1D, ZeroPadding1D, Permute, UpSampling1D, Conv1DTranspose
+from tensorflow.keras import Model
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+tf.config.experimental.set_virtual_device_configuration(gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4096)])
+
+class Encoder(Layer):
+    def __init__(self, frame_length, **kwargs):
+        super(Encoder, self).__init__(**kwargs)
+        self.frame_length = frame_length
+        self.conv1 = Conv1D(filters=128, kernel_size=64, padding='same')
+        self.abs = tf.keras.backend.abs
+        self.conv2 = Conv1D(filters=128, kernel_size=128, padding='same', activation='softplus')
+        self.pool = MaxPooling1D(16, frame_length//64, padding='same')
+
+    def call(self, inputTensor):
+        R = self.conv1(inputTensor)
+        x = self.abs(R)
+        x = self.conv2(x)
+        x = self.pool(x)
+        return x, R
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'frame_length': self.frame_length
+        })
+        return config
+
+class Decoder(Layer):
+    def __init__(self, frame_length, **kwargs):
+        super(Decoder, self).__init__(**kwargs)
+        self.frame_length = frame_length
+        self.upsampling = UpSampling1D(size=frame_length//64)
+        self.dense1 = Dense(128, activation='softplus')
+        self.dense2 = Dense(64, activation='softplus')
+        self.dense3 = Dense(64, activation='softplus')
+        self.dense4 = Dense(128, activation='relu')
+        self.convtranspose1 = Conv1DTranspose(1, 128, padding='same')
+
+    def call(self, inputTensor, R):
+        x = self.upsampling(inputTensor)
+        x *= R
+        x = self.dense1(x)
+        x = self.dense2(x)
+        x = self.dense3(x)
+        x = self.dense4(x)
+        return self.convtranspose1(x)
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'frame_length': self.frame_length
+        })
+        return config
 
 
-class Model(nn.Module):
-    def __init__(self, training_parameters):
-        super(Model, self).__init__()
-        self.training_parameters = training_parameters
-        self.adaptive_frontend = AdaptiveFrontend(training_parameters)
-        # self.ZDNN = ZDNN(training_parameters)
-        self.ZDNN = ZLstm(training_parameters)
-        self.backend = Backend(training_parameters)
+class Bypass(Layer):
+    def __init__(self, **kwargs):
+        super(Bypass, self).__init__(**kwargs)
 
-    def forward(self, input_tensor):
-        Z_tensor, pool_indices, residual_matrix = self.adaptive_frontend(input_tensor)
-        Z_hat_tensor = self.ZDNN(Z_tensor)
-        out_tensor = self.backend(Z_hat_tensor, pool_indices, residual_matrix)
-        return out_tensor
+    def call(self, inputs, fxs):
+        return inputs
 
 
-class TestModel(nn.Module):
-    def __init__(self, training_parameters):
-        super(Model, self).__init__()
-        self.training_parameters = training_parameters
-        frame_length = self.training_parameters.frame_length
-        hidden_size = self.training_parameters.hidden_length
-        hidden_size_half = int(hidden_size / 2)
-        self.conv1 = nn.Conv1d(frame_length, frame_length, kernel_size=hidden_size_half, padding=hidden_size_half-1)
-        self.dense1 = nn.Linear(in_features=hidden_size_half, out_features=hidden_size)
-        self.dense2 = nn.Linear(in_features=hidden_size, out_features=hidden_size)
-        self.dense3 = nn.Linear(in_features=hidden_size, out_features=hidden_size_half)
-        self.deconv1 = nn.ConvTranspose1d(frame_length, frame_length, kernel_size=2, padding=int(hidden_size_half/2))
-        self.activation = nn.Tanh()
+class ZFC(Layer):
+    def __init__(self, **kwargs):
+        super(ZFC, self).__init__(**kwargs)
+        self.dense1 = Dense(256, activation='softplus')
+        self.dense2 = Dense(128, activation='softplus')
+        self.dense3 = Dense(128, activation='softplus')
+        self.dense4 = Dense(64, activation='softplus')
+        self.permute = Permute((2, 1))
 
-    def forward(self, input_tensor):
-        output_tensor = self.activation(self.conv1(input_tensor))
-        output_tensor = self.activation(self.dense1(output_tensor))
-        output_tensor = self.activation(self.dense2(output_tensor))
-        output_tensor = self.activation(self.dense3(output_tensor))
-        output_tensor = self.deconv1(output_tensor)
-        output_tensor = output_tensor + input_tensor
-        return output_tensor
+    def call(self, inputs, fxs):
+        inputs = tf.concat([inputs, tf.repeat(tf.expand_dims(fxs, 1), 64, 1)], axis=2)
+        x = self.dense1(inputs)
+        x = self.dense2(x)
+        x = self.permute(x)
+        x = self.dense3(x)
+        x = self.dense4(x)
+        x = self.permute(x)
+        return x
 
 
-class ZDNN(nn.Module):
-    def __init__(self, training_parameters):
-        super(ZDNN, self).__init__()
-        self.training_parameters = training_parameters
-        self.dense_local = nn.Linear(in_features=128, out_features=128)
-        self.dense = nn.Linear(in_features=64, out_features=64)
-        self.softplus = nn.Softplus()
+def createEncoderDecoder(parameters):
+    encoder_input = Input(shape=(parameters.frame_length, 1), batch_size=parameters.batch_size, name="frame")
+    zdnn_fxs = Input((1,), batch_size=parameters.batch_size, name="fxsetting")
 
-    def forward(self, input_tensor):
-        out_tensor = self.dense_local(input_tensor)
-        out_tensor = out_tensor.permute((0, 2, 1))
-        out_tensor = self.dense(out_tensor)
-        out_tensor = out_tensor.permute((0, 2, 1))
-        return out_tensor
+    x, R = Encoder(parameters.frame_length)(encoder_input)
+    x = Bypass()(x, zdnn_fxs)
+    x = Decoder(parameters.frame_length)(x, R)
+
+    model = Model(inputs=[encoder_input, zdnn_fxs], outputs=[x])
+    return model
 
 
-class ZLstm(nn.Module):
-    def __init__(self, training_parameters):
-        super(ZLstm, self).__init__()
-        self.training_parameters = training_parameters
-        self.LSTM = nn.LSTM(input_size=128, hidden_size=64, batch_first=True, bidirectional=True, num_layers=4)
+def createZDNNNetwork(parameters, pretrainedEncoderDecoderPath):
+    encoder_input = Input(shape=(parameters.frame_length, 1), batch_size=parameters.batch_size, name="frame")
+    zdnn_fxs = Input((1,), batch_size=parameters.batch_size, name="fxsetting")
 
-    def forward(self, input_tensor):
-        out_tensor, (_, _) = self.LSTM(input_tensor)
-        return out_tensor
+    encoderDecoder = createEncoderDecoder(parameters)
+    encoderDecoder.load_weights(pretrainedEncoderDecoderPath)
+    encoder = encoderDecoder.get_layer("encoder")
+    decoder = encoderDecoder.get_layer("decoder")
+    zdnn = ZFC()
 
+    x, R = encoder(encoder_input)
+    x = zdnn(x, zdnn_fxs)
+    x = decoder(x, R)
 
-class AdaptiveFrontend(nn.Module):
-    def __init__(self, training_parameters):
-        super(AdaptiveFrontend, self).__init__()
-        self.training_parameters = training_parameters
-        self.conv1 = nn.Conv1d(self.training_parameters.frame_length, self.training_parameters.frame_length, kernel_size=128, dilation=1, stride=1, padding=127, groups=self.training_parameters.frame_length)
-        self.abs = Abs()
-        self.conv2 = nn.Conv1d(self.training_parameters.frame_length, self.training_parameters.frame_length, kernel_size=1)
-        self.softplus = nn.Softplus()
-        self.pool = PoolInDim(dimension=1, input_size=self.training_parameters.frame_length)
-
-    def forward(self, input_tensor):
-        residual_matrix = self.conv1(input_tensor)
-        abs_x1 = self.abs(residual_matrix)
-        x2 = self.softplus(self.conv2(abs_x1))
-        poolx2, pool_indices = self.pool(x2)
-        return poolx2, pool_indices, residual_matrix
-
-
-class Backend(nn.Module):
-    def __init__(self, training_parameters):
-        super(Backend, self).__init__()
-        self.training_parameters = training_parameters
-        unpoolparameters = unpoolParameters(64, self.training_parameters.frame_length)
-        self.unpooling = nn.MaxUnpool1d(kernel_size=unpoolparameters['kernel_size'], stride=unpoolparameters['stride'], padding=unpoolparameters['padding'])
-        self.dense1 = nn.Linear(in_features=128, out_features=64)
-        self.dense2 = nn.Linear(in_features=64, out_features=64) 
-        self.dense3 = nn.Linear(in_features=64, out_features=64)
-        self.dense4 = nn.Linear(in_features=64, out_features=128)
-        self.softplus = nn.Softplus()
-        self.ReLU = nn.ReLU()
-        self.inverseConv = nn.ConvTranspose1d(self.training_parameters.frame_length, self.training_parameters.frame_length,
-                                              kernel_size=2, padding=64)
-
-    def forward(self, input_tensor, pool_indices, residual_matrix):
-        out_tensor = input_tensor.permute((0, 2, 1))
-        out_tensor = self.unpooling(out_tensor, pool_indices)
-        out_tensor = out_tensor.permute((0, 2, 1))
-        out_tensor = residual_matrix * out_tensor
-        out_tensor = self.softplus(self.dense1(out_tensor))
-        out_tensor = self.softplus(self.dense2(out_tensor))
-        out_tensor = self.softplus(self.dense3(out_tensor))
-        out_tensor = self.ReLU(self.dense4(out_tensor))
-        out_tensor = self.inverseConv(out_tensor)
-        return out_tensor
+    model = Model(inputs=[encoder_input, zdnn_fxs], outputs=[x])
+    model.get_layer("encoder").trainable = False
+    model.get_layer("frame").trainable = False
+    model.get_layer("fxsetting").trainable = False
+    model.get_layer("decoder").trainable = False
+    return model
 
 
 if __name__ == "__main__":
-    import argparse
-    from torchsummaryX import summary
-    params = argparse.Namespace()
-    # params.frame_length = 128
-    for i in range(7, 8):
-        # params.hidden_length = int(2**i)
-        params.frame_length = int(2**i)
-        model = Model(params)
-        device = 'cpu'
-        summary(model, torch.randn(2, params.frame_length, 1))
+    import numpy as np
+
+    class Parameters:
+        def __init__(self):
+            self.frame_length = 4096
+            self.batch_size = 128
+    parameters = Parameters()
+
+    decoderPath = "/opt/DNNEffects/models/CAFx_enc_dec_4096_128/models/decoder.h5"
+    encoderPath = "/opt/DNNEffects/models/CAFx_enc_dec_4096_128/models/encoder.h5"
+
+    # autoencoder = createCAFx(parameters, encoderPath, decoderPath)
+    autoencoder = createZDNNNetwork(parameters, "models/CAFx_enc_dec_4096_128/models/model.012-0.000008.h5")
+
+    x, x2 = np.random.rand(parameters.batch_size, parameters.frame_length, 1), np.random.rand(parameters.batch_size, 1)
+    inputs = dict(frame=x, fxsetting=x2)
+    outputs = autoencoder(inputs)
+
+    autoencoder.summary()

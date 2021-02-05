@@ -1,100 +1,104 @@
-import torch
+import tensorflow.keras as keras
+import tensorflow as tf
+from dataset import DataGenerator
+from model import createEncoderDecoder,createZDNNNetwork
+from callbacks import CustomLogging, CustomSaver
 import logging
-import torch.optim as optim
-from torch.utils.data import DataLoader
-from model import Model
-from model_io import ModelIO
-from dataset import LstDataset, DatasetFromDisk
-from utils import Timer
+from pathlib import Path
+import pickle
+import json
+import re
 
 
-class Trainer():
+class Trainer:
     def __init__(self, parameters):
         self.parameters = parameters
-        self.init_model()
-        self.init_torch_modules()
-        self.init_dataset()
-        self.timer = Timer()
-
-    def init_model(self):
-        self.model = Model(self.parameters)
-        logging.info(self.model)
-        self.modelIO = ModelIO(self.parameters, self.model)
-        self.start_epoch = 0
-        if self.parameters.checkpoint is not None:
-            logging.info(f"loading checkpoint from path {self.parameters.checkpoint}")
-            self.start_epoch = self.modelIO.load_model_checkpoint(self.parameters.checkpoint)
-            logging.info(f"checkpoint loaded in epoch {self.start_epoch}")
-
-    def init_torch_modules(self):
-        self.optimizer = optim.Adam(self.model.parameters())
-        self.criterion = torch.nn.MSELoss(reduction='mean')
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    def init_dataset(self):
-        self.train_dataset = DataLoader(LstDataset(self.parameters, self.parameters.train_lst), batch_size=self.parameters.batch_size, shuffle=True, drop_last=True)
-        self.test_dataset = DataLoader(LstDataset(self.parameters, self.parameters.test_lst), batch_size=self.parameters.batch_size, shuffle=True, drop_last=True)
+        logging.info("Available Devices:")
+        logging.info(tf.config.list_physical_devices('GPU'))
 
     def __call__(self, *args, **kwargs):
-        self.train_model(*args, **kwargs)
+        self.train(*args, **kwargs)
 
-    def train_model(self):
-        logging.info(f"Stating training from epoch {self.start_epoch}")
-        for epochIdx in range(self.start_epoch, self.parameters.epochs):
-            logging.info(f"Epoch: {epochIdx}")
-            self.train_epoch()
-            test_accuracy = self.test_epoch()
-            self.modelIO.save_model(epochIdx, test_accuracy)
+    def train(self):
+        self.__createDatasets()
+        self.__createModel()
+        self.__createCallBacks()
+        self.__trainModel()
 
-    @staticmethod
-    def log_progress(currentidx, length, log_interval, metric, remaining_time):
-        if (currentidx + 1) % log_interval == 0 or (currentidx + 1 == length):
-            logging.info(f"Progress: {currentidx+1}/{length} batches: MSEError={metric/currentidx:.6f} remaining_time: {remaining_time:.2f}s")
+    def __createDatasets(self):
+        if self.parameters.pretrained is None:
+            logging.info("Loading dataset with target same source and target files")
+            target_label = 'source'
+        else:
+            logging.info("Loading dataset with target source and target files")
+            target_label = 'target'
 
-    @staticmethod
-    def move_tensors_to_cuda(*args):
-        return_args = ()
-        for arg in args:
-            if isinstance(arg, torch.Tensor):
-                return_args += (arg.cuda(),)
-        return return_args
+        self.trainGenerator = DataGenerator(self.parameters.train_lst,
+                                            batch_size=self.parameters.batch_size,
+                                            frame_length=self.parameters.frame_length,
+                                            target_label=target_label)
+        self.testGenerator = DataGenerator(self.parameters.test_lst,
+                                            batch_size=self.parameters.batch_size,
+                                            frame_length=self.parameters.frame_length,
+                                            target_label=target_label)
 
-    def train_epoch(self):
-        self.model.train()
-        if self.device == "cuda":
-            self.model.cuda()
-        logging.info("Train stage")
-        train_mse_error = 0.0
-        execution_time = 0.0
-        for batch_idx, (source_tensor, target_tensor) in enumerate(self.train_dataset):
-            self.timer.start()
-            self.log_progress(batch_idx, len(self.train_dataset), self.parameters.log_interval, train_mse_error, execution_time*(len(self.train_dataset)-batch_idx-1))
-            if self.device == "cuda":
-                source_tensor, target_tensor = self.move_tensors_to_cuda(source_tensor, target_tensor)
-            self.optimizer.zero_grad()
-            outputs = self.model(source_tensor)
-            loss = self.criterion(outputs, target_tensor)
-            loss.backward()
-            train_mse_error += loss.item()
-            self.optimizer.step()
-            execution_time = self.timer.stop()
-        return train_mse_error / len(self.train_dataset)
+    def __createModel(self):
+        if self.parameters.pretrained is None:
+            logging.info("loading encoder decoder with bypass zdnn")
+            self.model = createEncoderDecoder(self.parameters)
+        else:
+            logging.info("loading full zdnn")
+            self.model = createZDNNNetwork(self.parameters, self.parameters.pretrained)
 
-    def test_epoch(self):
-        logging.info("Test stage")
-        self.model.eval()
-        if self.device == "cuda":
-            self.model.cuda()
-        with torch.no_grad():
-            test_mse_error = 0.0
-            execution_time = 0.0
-            for batch_idx, (source_tensor, target_tensor) in enumerate(self.test_dataset):
-                self.timer.start()
-                self.log_progress(batch_idx, len(self.test_dataset), self.parameters.log_interval, test_mse_error, execution_time*(len(self.train_dataset)-batch_idx-1))
-                if self.device == "cuda":
-                    source_tensor, target_tensor = self.move_tensors_to_cuda(source_tensor, target_tensor)
-                outputs = self.model(source_tensor)
-                loss = self.criterion(outputs, target_tensor)
-                test_mse_error += loss.item()
-                execution_time = self.timer.stop()
-        return test_mse_error / len(self.test_dataset)
+        self.model.compile(
+            optimizer="Adam", loss="mse", metrics=["mae"]
+        )
+        summary = self.getSummary()
+        logging.info(summary)
+
+    def getSummary(self):
+        summary = []
+        self.model.summary(line_length=100, print_fn=lambda x: summary.append(x))
+        for layer in self.model.layers:
+            if isinstance(layer, keras.Model):
+                layer.model().summary(line_length=100, print_fn=lambda x: summary.append(x))
+        return "Summary:\n"+'\n'.join(summary)
+
+    def __createCallBacks(self):
+        self.modelFilePath = Path('models/' + self.parameters.name + '/models/model.{epoch:03d}-{val_loss:.6f}.h5')
+        self.modelFilePath.parent.mkdir(parents=True, exist_ok=True)
+        self.callbacks = [
+            tf.keras.callbacks.EarlyStopping(patience=20),
+            tf.keras.callbacks.ModelCheckpoint(filepath=self.modelFilePath, save_best_only=True),
+            tf.keras.callbacks.TensorBoard(log_dir=f'./runs/{self.parameters.name}'),
+            CustomLogging()
+        ]
+
+    def __trainModel(self):
+        with open(self.modelFilePath.parent.parent / "model.json", "w") as f:
+            config = dict()
+            for k, v in self.parameters.__dict__.items():
+                config[k] = v if not isinstance(v, Path) else str(v)
+            json.dump(config, f)
+
+        if self.parameters.checkpoint is None:
+            initial_epoch = 0
+        else:
+            self.model.load_weights(self.parameters.checkpoint)
+            initial_epoch = int(re.search('[a-z]*.([0-9]*)-[0-9]*.[0-9]*.h5', self.parameters.checkpoint.name).group(1))
+
+        history = self.model.fit(x=self.trainGenerator,
+                       epochs=self.parameters.epochs,
+                       validation_data=self.testGenerator,
+                       shuffle=False,
+                       callbacks=self.callbacks,
+                       initial_epoch=initial_epoch)
+
+        with open(self.modelFilePath.parent.parent / "history.pkl", "wb") as f:
+            pickle.dump(history.history, f)
+
+    def saveBestModels(self):
+        submodel_save_pattern = str(self.modelFilePath.parent / "{0}.h5")
+        for layer in self.model.layers:
+            if isinstance(layer, keras.Model):
+                layer.save_weights(submodel_save_pattern.format(layer.name))
