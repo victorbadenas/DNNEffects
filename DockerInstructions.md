@@ -72,8 +72,8 @@ This should result in a console output shown below:
 ### Build Effects Container
 
 ```bash
-dockerfile_path='./tensorflow/'
-docker build -t effects:0.1 ${dockerfile_path}
+dockerfile_path='./docker/' && \
+docker build -t effects:1.0 ${dockerfile_path}
 ```
 
 Run container and link the database and repo folders
@@ -82,7 +82,8 @@ Run container and link the database and repo folders
 docker run -it --gpus all \
    -v ${local/repo/path}:/opt/DNNEffects/ \
    -v ${local/dataset/path}:/db/IDMT-SMT-AUDIO-EFFECTS/ \
+   -e TF_FORCE_GPU_ALLOW_GROWTH=true \
    -w /opt/DNNEffects/ \
-   effects:0.1 \
+   effects:1.0 \
    bash
 ```
