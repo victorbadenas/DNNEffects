@@ -7,6 +7,7 @@ import soundfile as sf
 import numpy as np
 from utils import timer
 
+
 class DataGenerator(keras.utils.Sequence):
     def __init__(self, lst_path, batch_size=32, frame_length=256, shuffle=True):
         self.batch_size = batch_size
@@ -25,7 +26,7 @@ class DataGenerator(keras.utils.Sequence):
         return df
 
     def load_audio_data(self):
-        self.source_audio_files, load_time = self.load_audio_files(label='source')
+        self.source_audio_files, load_time = self.load_audio_files_with_tags(label='source')
         logging.info(f"source audio files have been loaded in {load_time:.2f}s")
         self.target_audio_files, load_time = self.load_audio_files(label='target')
         logging.info(f"target audio files have been loaded in {load_time:.2f}s")
@@ -43,8 +44,23 @@ class DataGenerator(keras.utils.Sequence):
         logging.info(f"{len(self.frames)} frames have been computed")
 
     @timer(print_=False)
+    def load_audio_files_with_tags(self, label):
+        fxsetting_max = self.lst_data['fxsetting'].max()
+        audio_files = list()
+        for index, source_file_metadata in self.lst_data.iterrows():
+            audio_file = AudioFile(source_file_metadata[label], self.frame_length)
+            audio_file.normalize()
+            effect_params = dict(fxsetting=source_file_metadata['fxsetting']/fxsetting_max)
+            audio_file.set_params(effect_params)
+            audio_files.append(audio_file)
+        return audio_files
+
+    @timer(print_=False)
     def load_audio_files(self, label):
-        return [AudioFile(source_file, self.frame_length) for source_file in self.lst_data[label]]
+        audio_files = [AudioFile(source_file, self.frame_length) for source_file in self.lst_data[label]]
+        for af in audio_files:
+            af.normalize()
+        return audio_files
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -62,22 +78,24 @@ class DataGenerator(keras.utils.Sequence):
 
         batch_frames_indexes = [self.frames[k] for k in selected_indexes]
 
-        X, y = self.__data_generation(batch_frames_indexes)
+        X, fxsetting, y = self.__data_generation(batch_frames_indexes)
 
-        return X, y
+        return {"frame": X, "fxsetting": fxsetting}, y
 
     def __data_generation(self, batch_frames_indexes):
         'Generates data containing batch_size samples' # X : (n_samples, *dim, n_channels)
         # Initialization
-        X = np.empty((self.batch_size, self.frame_length))
-        y = np.empty((self.batch_size, self.frame_length))
+        X = np.empty((self.batch_size, self.frame_length, 1))
+        fxsetting = np.empty((self.batch_size, 1))
+        y = np.empty((self.batch_size, self.frame_length, 1))
 
         for i, frame_index in enumerate(batch_frames_indexes):
             audio_idx, frame_idx = frame_index['audio_idx'], frame_index['frame_idx']
-            X[i] = self.source_audio_files[audio_idx].get_frame(frame_idx)
-            y[i] = self.target_audio_files[audio_idx].get_frame(frame_idx)
+            X[i] = self.source_audio_files[audio_idx].get_frame(frame_idx)[:, None]
+            fxsetting[i, 0] = self.source_audio_files[audio_idx].fxsetting
+            y[i] = self.target_audio_files[audio_idx].get_frame(frame_idx)[:, None]
 
-        return X, y
+        return X, fxsetting, y
 
 
 class AudioFile:
@@ -128,6 +146,13 @@ class AudioFile:
             frame = self.get_frame(self.frame_counter)
             self.frame_counter += 1
             return frame
+
+    def normalize(self):
+        self.audio_data /= np.max(np.abs(self.audio_data))
+
+    def set_params(self, param_dict):
+        for k, v in param_dict.items():
+            setattr(self, k, v)
 
 
 if __name__ == "__main__":
