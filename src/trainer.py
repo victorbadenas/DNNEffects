@@ -1,12 +1,21 @@
 import tensorflow.keras as keras
 import tensorflow as tf
 from dataset import DataGenerator
-from model import TestModel
-from callbacks import CustomLogging
+from model import createEncoderDecoder,createZDNNNetwork
+from callbacks import CustomLogging, CustomSaver
+import logging
+from utils import get_model_memory_usage
+from pathlib import Path
+import pickle
+import json
+import re
+
 
 class Trainer:
     def __init__(self, parameters):
         self.parameters = parameters
+        logging.info("Available Devices:")
+        logging.info(tf.config.list_physical_devices('GPU'))
 
     def __call__(self, *args, **kwargs):
         self.train(*args, **kwargs)
@@ -18,26 +27,67 @@ class Trainer:
         self.__trainModel()
 
     def __createDatasets(self):
-        self.trainGenerator = DataGenerator(self.parameters.train_lst, batch_size=self.parameters.batch_size, frame_length=self.parameters.frame_length)
-        self.testGenerator = DataGenerator(self.parameters.test_lst, batch_size=self.parameters.batch_size, frame_length=self.parameters.frame_length)
+        self.trainGenerator = DataGenerator(self.parameters.train_lst,
+                                            batch_size=self.parameters.batch_size,
+                                            frame_length=self.parameters.frame_length)
+        self.testGenerator = DataGenerator(self.parameters.test_lst,
+                                            batch_size=self.parameters.batch_size,
+                                            frame_length=self.parameters.frame_length)
 
     def __createModel(self):
-        self.model = TestModel()
+        self.model = createZDNNNetwork(self.parameters, self.parameters.pretrained)
         self.model.compile(
-            loss='mse'
+            optimizer="Adam", loss="mse", metrics=["mae"]
         )
+        summary = self.getSummary()
+        logging.info(summary)
+
+    def getSummary(self):
+        summary = []
+        self.model.summary(line_length=100, print_fn=lambda x: summary.append(x))
+        for layer in self.model.layers:
+            if isinstance(layer, keras.Model):
+                layer.model().summary(line_length=100, print_fn=lambda x: summary.append(x))
+        return "Summary:\n"+'\n'.join(summary)
 
     def __createCallBacks(self):
-        modelFilePath = 'models/' + self.parameters.name + '/model.{epoch:02d}-{val_loss:.2f}.h5'
+        self.modelFilePath = Path('models/' + self.parameters.name + '/models/model.{epoch:03d}-{val_loss:.6f}.h5')
+        self.modelFilePath.parent.mkdir(parents=True, exist_ok=True)
         self.callbacks = [
-            tf.keras.callbacks.EarlyStopping(patience=2),
-            tf.keras.callbacks.ModelCheckpoint(filepath=modelFilePath),
+            tf.keras.callbacks.EarlyStopping(patience=20),
+            tf.keras.callbacks.ModelCheckpoint(filepath=self.modelFilePath, save_best_only=True),
+            # CustomSaver(self.modelFilePath.parent, "{name}.{epoch:03d}-{val_loss:.6f}.h5"),
+            tf.keras.callbacks.TensorBoard(log_dir=f'./runs/{self.parameters.name}'),
             CustomLogging()
         ]
 
     def __trainModel(self):
-        self.model.fit(x=self.trainGenerator,
+        with open(self.modelFilePath.parent.parent / "model.json", "w") as f:
+            config = dict()
+            for k, v in self.parameters.__dict__.items():
+                config[k] = v if not isinstance(v, Path) else str(v)
+            json.dump(config, f)
+
+        if self.parameters.checkpoint is None:
+            initial_epoch = 0
+        else:
+            self.model.load_weights(self.parameters.checkpoint)
+            initial_epoch = int(re.search('[a-z]*.([0-9]*)-[0-9]*.[0-9]*.h5', self.parameters.checkpoint.name).group(1))
+
+        history = self.model.fit(x=self.trainGenerator,
                        epochs=self.parameters.epochs,
                        validation_data=self.testGenerator,
                        shuffle=False,
-                       callbacks=self.callbacks)
+                       callbacks=self.callbacks,
+                       initial_epoch=initial_epoch)
+
+        with open(self.modelFilePath.parent.parent / "history.pkl", "wb") as f:
+            pickle.dump(history.history, f)
+
+        # self.saveBestModels()
+
+    def saveBestModels(self):
+        submodel_save_pattern = str(self.modelFilePath.parent / "{0}.h5")
+        for layer in self.model.layers:
+            if isinstance(layer, keras.Model):
+                layer.save_weights(submodel_save_pattern.format(layer.name))
