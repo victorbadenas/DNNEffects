@@ -57,14 +57,14 @@ class LstBuilderFromXML:
         return audiofile
 
     def find_noFx_audio(self, target_audio, subset_root):
-        noFxFolder = subset_root / "Samples" / "NoFx"
+        noFxFolder = subset_root / "Samples" / "NoFX"
         target_filename = target_audio.stem
         source_filename = '-'.join(target_filename.split('-')[:2]) + "-*.wav"
         source_filenames = list(noFxFolder.glob(source_filename))
         if len(source_filenames) == 0:
-            raise OSError("No source files found")
+            raise OSError(f"No source files found for {noFxFolder/source_filename}")
         if len(source_filenames) != 1:
-            raise OSError("found multiple possible source files")
+            raise OSError(f"found multiple possible source files for {noFxFolder/source_filename}")
         return source_filenames[0]
 
     @staticmethod

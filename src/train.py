@@ -1,12 +1,11 @@
-import sys
-import torch
 import logging
 import argparse
 from pathlib import Path
+import sys
 from trainer import Trainer
+import tensorflow as tf
 
-torch.random.manual_seed(0)
-
+tf.random.set_seed(0)
 
 def set_logger(parameters):
     level = logging.DEBUG if parameters.debug else logging.INFO
@@ -34,9 +33,8 @@ def parse_arguments_from_command_line():
     parser.add_argument("--log_file", type=Path, default="./log/train.log")
     parser.add_argument("--epochs", type=int, default=300)
     parser.add_argument("--frame_length", type=int, default=256)
-    parser.add_argument("--log_interval", type=int, default=200)
-    parser.add_argument("--hidden_length", type=int, default=32)
     parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--pretrained", type=Path, default=None)
     parser.add_argument("--checkpoint", type=Path, default=None)
     return parser.parse_args()
 
@@ -44,7 +42,7 @@ def parse_arguments_from_command_line():
 def show_parameters(parameters):
     logging.info("Training with parameters:")
     for label, value in parameters.__dict__.items():
-        logging.info(f"{label}: {value}")
+        logging.info(f"\t{label}: {value}")
 
 
 if __name__ == "__main__":
