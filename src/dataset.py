@@ -9,9 +9,10 @@ from utils import timer
 
 
 class DataGenerator(keras.utils.Sequence):
-    def __init__(self, lst_path, batch_size=32, frame_length=256, shuffle=True):
+    def __init__(self, lst_path, batch_size=32, frame_length=256, shuffle=True, target_label='target'):
         self.batch_size = batch_size
         self.frame_length = frame_length
+        self.target_label = target_label
         self.lst_data = self.load_lst(lst_path)
         self.load_audio_data()
         self.compute_frame_list()
@@ -28,7 +29,7 @@ class DataGenerator(keras.utils.Sequence):
     def load_audio_data(self):
         self.source_audio_files, load_time = self.load_audio_files_with_tags(label='source')
         logging.info(f"source audio files have been loaded in {load_time:.2f}s")
-        self.target_audio_files, load_time = self.load_audio_files(label='target')
+        self.target_audio_files, load_time = self.load_audio_files(label=self.target_label)
         logging.info(f"target audio files have been loaded in {load_time:.2f}s")
 
     def compute_frame_list(self):

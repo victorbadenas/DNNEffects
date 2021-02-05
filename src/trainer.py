@@ -4,7 +4,6 @@ from dataset import DataGenerator
 from model import createEncoderDecoder,createZDNNNetwork
 from callbacks import CustomLogging, CustomSaver
 import logging
-from utils import get_model_memory_usage
 from pathlib import Path
 import pickle
 import json
@@ -27,15 +26,30 @@ class Trainer:
         self.__trainModel()
 
     def __createDatasets(self):
+        if self.parameters.pretrained is None:
+            logging.info("Loading dataset with target same source and target files")
+            target_label = 'source'
+        else:
+            logging.info("Loading dataset with target source and target files")
+            target_label = 'target'
+
         self.trainGenerator = DataGenerator(self.parameters.train_lst,
                                             batch_size=self.parameters.batch_size,
-                                            frame_length=self.parameters.frame_length)
+                                            frame_length=self.parameters.frame_length,
+                                            target_label=target_label)
         self.testGenerator = DataGenerator(self.parameters.test_lst,
                                             batch_size=self.parameters.batch_size,
-                                            frame_length=self.parameters.frame_length)
+                                            frame_length=self.parameters.frame_length,
+                                            target_label=target_label)
 
     def __createModel(self):
-        self.model = createZDNNNetwork(self.parameters, self.parameters.pretrained)
+        if self.parameters.pretrained is None:
+            logging.info("loading encoder decoder with bypass zdnn")
+            self.model = createEncoderDecoder(self.parameters)
+        else:
+            logging.info("loading full zdnn")
+            self.model = createZDNNNetwork(self.parameters, self.parameters.pretrained)
+
         self.model.compile(
             optimizer="Adam", loss="mse", metrics=["mae"]
         )
@@ -56,7 +70,6 @@ class Trainer:
         self.callbacks = [
             tf.keras.callbacks.EarlyStopping(patience=20),
             tf.keras.callbacks.ModelCheckpoint(filepath=self.modelFilePath, save_best_only=True),
-            # CustomSaver(self.modelFilePath.parent, "{name}.{epoch:03d}-{val_loss:.6f}.h5"),
             tf.keras.callbacks.TensorBoard(log_dir=f'./runs/{self.parameters.name}'),
             CustomLogging()
         ]
@@ -83,8 +96,6 @@ class Trainer:
 
         with open(self.modelFilePath.parent.parent / "history.pkl", "wb") as f:
             pickle.dump(history.history, f)
-
-        # self.saveBestModels()
 
     def saveBestModels(self):
         submodel_save_pattern = str(self.modelFilePath.parent / "{0}.h5")

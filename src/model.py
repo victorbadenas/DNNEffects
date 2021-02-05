@@ -3,7 +3,6 @@ import tensorflow.keras as keras
 import tensorflow.nn as nn
 from tensorflow.keras.layers import Layer, Dense, Input, Conv1D, LocallyConnected1D, MaxPooling1D, ZeroPadding1D, Permute, UpSampling1D, Conv1DTranspose
 from tensorflow.keras import Model
-from utils import get_model_memory_usage
 
 gpus = tf.config.experimental.list_physical_devices('GPU')
 tf.config.experimental.set_virtual_device_configuration(gpus[0], [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4096)])
